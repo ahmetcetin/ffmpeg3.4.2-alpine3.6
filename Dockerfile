@@ -1,15 +1,10 @@
-# ffmpeg - http://ffmpeg.org/download.html
-#
-# https://hub.docker.com/r/jrottenberg/ffmpeg/
-#
-#
-
-FROM        alpine:3.6 AS base
+FROM alpine:3.6 AS base
+MAINTAINER  Julien Rottenberg <julien@rottenberg.info>
 
 RUN     apk  add --no-cache --update libgcc libstdc++ ca-certificates libcrypto1.0 libssl1.0 libgomp expat
 
 
-FROM        base AS build
+FROM        base AS buildffmpeg
 
 WORKDIR     /tmp/workdir
 
@@ -18,12 +13,12 @@ ARG        LD_LIBRARY_PATH=/opt/ffmpeg/lib
 ARG        PREFIX=/opt/ffmpeg
 ARG        MAKEFLAGS="-j2"
 
-ENV         FFMPEG_VERSION=4.0.2     \
+ENV         FFMPEG_VERSION=3.4.2     \
             FDKAAC_VERSION=0.1.5      \
             LAME_VERSION=3.99.5       \
             LIBASS_VERSION=0.13.7     \
             OGG_VERSION=1.3.2         \
-            OPENCOREAMR_VERSION=0.1.5 \
+            OPENCOREAMR_VERSION=0.1.4 \
             OPUS_VERSION=1.2          \
             OPENJPEG_VERSION=2.1.2    \
             THEORA_VERSION=1.1.1      \
@@ -37,7 +32,6 @@ ENV         FFMPEG_VERSION=4.0.2     \
             FONTCONFIG_VERSION=2.12.4 \
             LIBVIDSTAB_VERSION=1.1.0  \
             KVAZAAR_VERSION=1.2.0     \
-            AOM_VERSION=master        \
             SRC=/usr/local
 
 ARG         OGG_SHA256SUM="e19ee34711d7af328cb26287f4137e70630e7261b17cbe3cd41011d73a654692  libogg-1.3.2.tar.gz"
@@ -49,7 +43,6 @@ ARG         FREETYPE_SHA256SUM="5d03dd76c2171a7601e9ce10551d52d4471cf92cd205948e
 ARG         LIBVIDSTAB_SHA256SUM="14d2a053e56edad4f397be0cb3ef8eb1ec3150404ce99a426c4eb641861dc0bb  v1.1.0.tar.gz"
 ARG         LIBASS_SHA256SUM="8fadf294bf701300d4605e6f1d92929304187fca4b8d8a47889315526adbafd7  0.13.7.tar.gz"
 ARG         FRIBIDI_SHA256SUM="3fc96fa9473bd31dcb5500bdf1aa78b337ba13eb8c301e7c28923fea982453a8  0.19.7.tar.gz"
-
 
 RUN     buildDeps="autoconf \
                    automake \
@@ -78,7 +71,7 @@ RUN \
         DIR=/tmp/opencore-amr && \
         mkdir -p ${DIR} && \
         cd ${DIR} && \
-        curl -sL https://kent.dl.sourceforge.net/project/opencore-amr/opencore-amr/opencore-amr-${OPENCOREAMR_VERSION}.tar.gz | \
+        curl -sL https://10gbps-io.dl.sourceforge.net/project/opencore-amr/opencore-amr/opencore-amr-${OPENCOREAMR_VERSION}.tar.gz | \
         tar -zx --strip-components=1 && \
         ./configure --prefix="${PREFIX}" --enable-shared  && \
         make && \
@@ -164,7 +157,7 @@ RUN \
         cd ${DIR} && \
         curl -sL https://codeload.github.com/webmproject/libvpx/tar.gz/v${VPX_VERSION} | \
         tar -zx --strip-components=1 && \
-        ./configure --prefix="${PREFIX}" --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth --enable-pic --enable-shared \
+        ./configure --prefix="${PREFIX}" --enable-vp8 --enable-vp9 --enable-pic --enable-shared \
         --disable-debug --disable-examples --disable-docs --disable-install-bins  && \
         make && \
         make install && \
@@ -174,7 +167,7 @@ RUN \
         DIR=/tmp/lame && \
         mkdir -p ${DIR} && \
         cd ${DIR} && \
-        curl -sL https://kent.dl.sourceforge.net/project/lame/lame/$(echo ${LAME_VERSION} | sed -e 's/[^0-9]*\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\([0-9A-Za-z-]*\)/\1.\2/')/lame-${LAME_VERSION}.tar.gz | \
+        curl -sL https://10gbps-io.dl.sourceforge.net/project/lame/lame/$(echo ${LAME_VERSION} | sed -e 's/[^0-9]*\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\([0-9A-Za-z-]*\)/\1.\2/')/lame-${LAME_VERSION}.tar.gz | \
         tar -zx --strip-components=1 && \
         ./configure --prefix="${PREFIX}" --bindir="${PREFIX}/bin" --enable-shared --enable-nasm --enable-pic --disable-frontend && \
         make && \
@@ -292,20 +285,6 @@ RUN \
         make install && \
         rm -rf ${DIR}
 
-RUN \
-        dir=/tmp/aom ; \
-        mkdir -p ${dir} ; \
-        cd ${dir} ; \
-        curl -sLO https://aomedia.googlesource.com/aom/+archive/${AOM_VERSION}.tar.gz ; \
-        tar -zx -f ${AOM_VERSION}.tar.gz ; \
-        rm -rf CMakeCache.txt CMakeFiles ; \
-        mkdir -p ./aom_build ; \
-        cd ./aom_build ; \
-        cmake -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 ..; \
-        make ; \
-        make install ; \
-        rm -rf ${dir}
-
 ## ffmpeg https://ffmpeg.org/
 RUN  \
         DIR=$(mktemp -d) && cd ${DIR} && \
@@ -336,7 +315,6 @@ RUN  \
         --enable-openssl \
         --enable-libfdk_aac \
         --enable-libkvazaar \
-        --enable-libaom --extra-libs=-lpthread \
         --enable-postproc \
         --enable-small \
         --enable-version3 \
@@ -359,14 +337,5 @@ RUN \
     cp -r ${PREFIX}/share/ffmpeg /usr/local/share/ && \
     LD_LIBRARY_PATH=/usr/local/lib ffmpeg -buildconf
 
-### Release Stage
-FROM        base AS release
-MAINTAINER  Julien Rottenberg <julien@rottenberg.info>
-
 CMD         ["--help"]
 ENTRYPOINT  ["ffmpeg"]
-
-COPY --from=build /usr/local /usr/local
-
-# Let's make sure the app built correctly
-# Convenient to verify on https://hub.docker.com/r/jrottenberg/ffmpeg/builds/ console output
